@@ -19,140 +19,15 @@
 
    pnpm dev
 
-## 📡 API Documentation
-
-### POST /api/estimate
-
-Estimates carbon footprint from dish name.
-
-**Request:**
-
-```json
-{
-  "dish": "Chicken Biryani"
-}
-```
-
-**Response:**
-
-```json
-{
-  "dish": "Chicken Biryani",
-  "estimated_carbon_kg": 4.2,
-  "ingredients": [
-    { "name": "Rice", "carbon_kg": 1.1 },
-    { "name": "Chicken", "carbon_kg": 2.5 },
-    { "name": "Spices", "carbon_kg": 0.2 },
-    { "name": "Oil", "carbon_kg": 0.4 }
-  ]
-}
-```
-
-**Example using curl:**
-
-```bash
-curl -X POST http://localhost:8080/api/estimate \
-  -H "Content-Type: application/json" \
-  -d '{"dish": "Caesar Salad"}'
-```
-
-### POST /api/estimate/image
-
-Estimates carbon footprint from uploaded image.
-
-**Request:**
-
-- Content-Type: `multipart/form-data`
-- Field: `image` (file)
-- Supported formats: JPG, PNG, GIF
-- Max size: 5MB
-
-**Response:**
-
-```json
-{
-  "dish": "Identified Dish Name",
-  "estimated_carbon_kg": 3.1,
-  "ingredients": [
-    { "name": "Lettuce", "carbon_kg": 0.3 },
-    { "name": "Chicken", "carbon_kg": 2.2 },
-    { "name": "Croutons", "carbon_kg": 0.4 },
-    { "name": "Dressing", "carbon_kg": 0.2 }
-  ]
-}
-```
-
-**Example using curl:**
-
-```bash
-curl -X POST http://localhost:8080/api/estimate/image \
-  -F "image=@path/to/your/food-image.jpg"
-```
-
-## 🏗️ Architecture
-
-### Tech Stack
-
-- **Frontend**: React 18 + TypeScript + Vite + TailwindCSS
-- **Backend**: Express.js + TypeScript
-- **AI**: OpenRouter (Llama 3.2 11B Vision)
-- **File Upload**: Multer
-- **Validation**: Zod
-- **UI Components**: Radix UI + shadcn/ui
-
-### Project Structure
-
-```
-├── client/                 # Frontend React app
-│   ├── components/ui/      # Reusable UI components
-│   ├── pages/             # Page components
-│   ├── App.tsx            # Main app component
-│   └── global.css         # Global styles
-├── server/                # Backend Express app
-│   ├── routes/            # API route handlers
-│   ├── services/          # Business logic
-│   └── index.ts           # Server setup
-├── shared/                # Shared types
-│   └── api.ts             # API interfaces
-└── package.json
-```
-
-### Key Design Decisions
-
-1. **AI Integration**: Used OpenRouter for flexible AI model access
-2. **Type Safety**: Shared TypeScript interfaces between client/server
-3. **Error Handling**: Comprehensive error handling with fallback estimations
-4. **UX**: Tabs for different input methods, real-time feedback
-5. **Performance**: Image size limits and loading states
-6. **Sustainability**: Green color scheme to match the environmental theme
-
-## 🧪 Testing
-
-### Manual Testing
-
-1. **Text Input Test**:
-   - Navigate to the app
-   - Enter "Chicken Biryani" in the text tab
-   - Click "Estimate Carbon Footprint"
-   - Verify response shows breakdown
-
-2. **Image Upload Test**:
-   - Switch to "Upload Photo" tab
-   - Upload a food image
-   - Click "Analyze Photo"
-   - Verify AI identifies the dish
-
-3. **Error Handling Test**:
+##  Error Handling Test:
    - Try empty input
    - Try uploading non-image file
    - Try very large image
-   - Verify appropriate error messages
 
 ### API Testing
 
 Test endpoints directly:
 
-```bash
 # Test ping endpoint
 curl http://localhost:8080/api/ping
 
@@ -164,101 +39,95 @@ curl -X POST http://localhost:8080/api/estimate \
 # Test image estimation (replace with actual image path)
 curl -X POST http://localhost:8080/api/estimate/image \
   -F "image=@food.jpg"
-```
 
-## 🚢 Production Deployment
+### Key Design Decisions
 
-### Build for Production
+#### 1. **Shared Types Between Frontend/Server**
+# typescript
+// shared/api.ts
+export interface EstimateResponse {
+  dish: string;
+  estimated_carbon_kg: number;
+  ingredients: Ingredient[];
+}
 
-```bash
-pnpm build
-```
+**Reasoning**: Helps avoid type mismatches and makes it safer to refactor. This saved me from multiple bugs that resulted from a different data shape being expected in frontend and backend. 
 
-### Environment Variables
+#### 2. **Separate api endpoints**
 
-Required for production:
+// server/services/carbonEstimator.ts
+export class CarbonEstimator {
+  async estimateFromDish(dishName: string): Promise<EstimateResponse>
+  async estimateFromImage(imageUrl: string): Promise<EstimateResponse>
+}
 
-- `OPENROUTER_API_KEY`: Your OpenRouter API key
-- `NODE_ENV`: Set to "production"
+**Reasoning**: Decouples logic for AI integration from http handling. This makes it easier to test and also gives us the ability to easily swap AI providers in the future. 
 
-### Docker Support
+*Reasoning**: Ensures the app always works, even if OpenRouter is down. Better user experience than showing errors.
 
-```dockerfile
-FROM node:18-alpine
-WORKDIR /app
-COPY package*.json ./
-RUN npm install
-COPY . .
-RUN npm run build
-EXPOSE 8080
-CMD ["npm", "start"]
-```
+### Handled Edge Cases:
+1. **Empty/Invalid Inputs**
 
-### Deployment Options
+   if (!dish || typeof dish !== 'string' || dish.trim().length === 0) {
+     return res.status(400).json({ error: "Invalid dish name" });
+   }
 
-- **Netlify**: Use the MCP integration for easy deployment
-- **Vercel**: Connect your repo and deploy automatically
-- **Docker**: Build and deploy container to any cloud provider
+2. **Large File Uploads**
 
-## 🔒 Security Considerations
+   limits: { fileSize: 5 * 1024 * 1024 } // 5MB limit
 
-- API key stored as environment variable
-- File upload size limits (5MB)
-- File type validation (images only)
-- Input sanitization for dish names
-- CORS configuration
-- No sensitive data logged
+3. **Non-Image File Uploads**
 
-## 📝 Assumptions & Limitations
+   fileFilter: (req, file, cb) => {
+     if (file.mimetype.startsWith('image/')) {
+       cb(null, true);
+     } else {
+       cb(new Error('Only image files allowed'));
+     }
+   }
 
-### Assumptions
+4. **AI Response Parsing Failures**
 
-1. **Carbon Data**: AI estimates are approximations, not precise scientific data
-2. **Portion Sizes**: Assumes standard serving sizes
-3. **Regional Variations**: Doesn't account for local sourcing differences
-4. **Preparation Methods**: Basic cooking methods assumed
+   # Try to parse JSON from AI response
+   const jsonMatch = content.match(/\{[\s\S]*\}/);
+   if (!jsonMatch) {
+     throw new Error("No JSON found in response");
+   }
 
-### Limitations
+5. **API Response Body Reading Issues**
+   # Clone response to avoid "body stream already read" error
+   const responseClone = response.clone();
+   const responseText = await responseClone.text();
 
-1. **Accuracy**: AI estimations may vary from actual carbon footprints
-2. **Data Source**: No real-world carbon database integration
-3. **Image Quality**: Poor quality images may affect identification
-4. **Rate Limits**: Subject to OpenRouter API limits
-5. **Fallback**: Uses generic estimates when AI fails
+### Current Limitations:
+   # No Caching : Same dish analyzed multiple times costs API calls
+   # Basic Validation : Only checks for required fields, not data quality
 
-### Future Improvements
+### Production Considerations :
 
-- Real carbon footprint database integration
-- User location-based adjustments
-- Recipe ingredient quantities
-- Seasonal availability factors
-- Transportation distance calculations
-- User feedback for AI training
+## Security
+- Input sanitization and validation (Joi/Zod schemas)
+- Rate limiting (express-rate-limit)
+- API key rotation mechanism
+- Request logging and monitoring
 
-## 🛠️ Development
+## Performance
 
-### Available Scripts
+- Redis caching for repeated dish estimates
+- Image compression before AI processing  
 
-- `pnpm dev` - Start development server
-- `pnpm build` - Build for production
-- `pnpm start` - Start production server
-- `pnpm test` - Run tests
-- `pnpm typecheck` - TypeScript validation
+## Privacy
 
-### Contributing
+- Image processing: Delete uploaded images after analysis
+- Logging: Don't log sensitive user data
 
-1. Fork the repository
-2. Create feature branch
-3. Make changes with tests
-4. Submit pull request
+### Assumptions Made:
+1. **AI Accuracy**: openRouter's Llama model produces reasonable estimates for carbon
+2. **Standard Portions**: ai assumes standard serving sizes for menu items
+3. **Preparation Methods**: assumed methods of preparing food are standard.
 
-## 📄 License
+### Current Limitations:
+1. **No Historical Data**: No learning will take place from past estimates
+2. **Static Carbon Values**: No connection to real-world carbon database
+3. **API Dependency**: If OpenRouter goes down, then the AI is completely useless.
 
-MIT License - See LICENSE file for details
-
-## 🆘 Support
-
-- Check the console for detailed error messages
-- Verify your OpenRouter API key is valid
-- Ensure image files are under 5MB
-- Report issues with example inputs that fail
